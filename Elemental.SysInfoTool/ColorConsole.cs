@@ -104,11 +104,12 @@ namespace Elemental
             w = w.Write('2');
             w = w.Write(';');
 
-            w = WriteByte(w, r);
+            Span<char> n = stackalloc char[3];
+            w = w.Write(WriteByte(n, r));
             w = w.Write(';');
-            w = WriteByte(w, g);
+            w = w.Write(WriteByte(n, g));
             w = w.Write(';');
-            w = WriteByte(w, b);
+            w = w.Write(WriteByte(n, b));
             w = w.Write('m');
             Console.Out.Write(span.Slice(0, w.WriteCount));
         }
@@ -174,8 +175,6 @@ namespace Elemental
                 Span = buffer;
                 WriteCount = writeCount;
             }
-
-            public int Length => Span.Length;
 
             public SpanWriter<T> Write(Span<T> span)
             {
