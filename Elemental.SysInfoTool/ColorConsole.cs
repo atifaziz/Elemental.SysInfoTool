@@ -37,7 +37,7 @@ namespace Elemental
             DisableNewLineAutoReturn = 0x0008,
         }
 
-        // NoInlining, because I think it will avoid a potential JIT error on a non-windows platform. 
+        // NoInlining, because I think it will avoid a potential JIT error on a non-windows platform.
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static bool EnableColorMode()
         {
@@ -94,40 +94,29 @@ namespace Elemental
         public static void SetColor(bool foreground, byte r, byte g, byte b)
         {
             Span<char> span = stackalloc char[32]; // more than enough room
-            span[0] = Escape;
-            span[1] = '[';
-            span[2] = foreground ? '3' : '4';
-            span[3] = '8';
-            span[4] = ';';
-            span[5] = '2';
-            span[6] = ';';
+            var w = new SpanWriter<char>(span);
 
-            var idx = 7;
+            w = w.Write(Escape);
+            w = w.Write('[');
+            w = w.Write(foreground ? '3' : '4');
+            w = w.Write('8');
+            w = w.Write(';');
+            w = w.Write('2');
+            w = w.Write(';');
 
-            var sub = span.Slice(idx);
-            idx += WriteByte(sub, r);
-            sub = span.Slice(idx);
-            sub[0] = ';';
-            idx++;
-            sub = span.Slice(idx);
-            idx += WriteByte(sub, g);
-            sub = span.Slice(idx);
-            sub[0] = ';';
-            idx++;
-            sub = span.Slice(idx);
-            idx += WriteByte(sub, b);
-            sub = span.Slice(idx);
-            sub[0] = 'm';
-            idx++;
-            Console.Out.Write(span.Slice(0, idx));
+            w = WriteByte(w, r);
+            w = w.Write(';');
+            w = WriteByte(w, g);
+            w = w.Write(';');
+            w = WriteByte(w, b);
+            w = w.Write('m');
+            Console.Out.Write(span.Slice(0, w.WriteCount));
         }
 
-        static int WriteByte(Span<char> buffer, byte value)
+        static Span<char> WriteByte(Span<char> buffer, byte value)
         {
             int len = StringLength(value);
             int index = len;
-
-            Debug.Assert(buffer.Length >= len);
 
             do
             {
@@ -138,7 +127,26 @@ namespace Elemental
                 value = div;
             } while (value != 0);
 
-            return len;
+            return buffer.Slice(0, len);
+        }
+
+        static SpanWriter<char> WriteByte(SpanWriter<char> w, byte value)
+        {
+            int len = StringLength(value);
+            int index = len;
+            Span<char> buffer = stackalloc char[len];
+
+            do
+            {
+                byte div = (byte)(value / 10);
+                byte digit = (byte)(value - (10 * div));
+
+                buffer[--index] = (char)('0' + digit);
+                value = div;
+            } while (value != 0);
+
+            w.Write(buffer);
+            return new SpanWriter<char>(w.Span.Slice(len), w.WriteCount + len);
         }
 
         static int StringLength(byte value)
@@ -154,6 +162,37 @@ namespace Elemental
             }
 
             return 3;
+        }
+
+        readonly ref struct SpanWriter<T>
+        {
+            public readonly Span<T> Span;
+            public readonly int WriteCount;
+
+            public SpanWriter(Span<T> buffer, int writeCount = 0)
+            {
+                Span = buffer;
+                WriteCount = writeCount;
+            }
+
+            public int Length => Span.Length;
+
+            public SpanWriter<T> Write(Span<T> span)
+            {
+                var w = this;
+                foreach (var item in span)
+                    w = w.Write(item);
+                return w;
+            }
+
+            public SpanWriter<T> Write(T value)
+            {
+                Span[0] = value;
+                return new SpanWriter<T>(Span.Slice(1), WriteCount + 1);
+            }
+
+            public static implicit operator Span<T>(SpanWriter<T> w) => w.Span;
+            public static implicit operator SpanWriter<T>(Span<T> span) => new SpanWriter<T>(span);
         }
     }
 }
